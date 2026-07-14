@@ -1,0 +1,1318 @@
+# 
+Action: {"type": "mcp_tool", "tool_name": "mcp_view_bulk", "tool_arguments": {"paths": ["/app/backend/server.py", "/app/backend/requirements.txt", "/app/backend/.env", "/app/frontend/package.json", "/app/frontend/.env", "/app/frontend/src/App.js", "/app/frontend/src/App.css", "/app/frontend/src/index.css", "/app/frontend/src/index.js", "/app/frontend/tailwind.config.js"]}}
+Observation: ===FILE: /app/backend/server.py
+/app/backend/server.py:
+1|from fastapi import FastAPI, APIRouter
+2|from dotenv import load_dotenv
+3|from starlette.middleware.cors import CORSMiddleware
+4|from motor.motor_asyncio import AsyncIOMotorClient
+5|import os
+6|import logging
+7|from pathlib import Path
+8|from pydantic import BaseModel, Field, ConfigDict
+9|from typing import List
+10|import uuid
+11|from datetime import datetime, timezone
+12|
+13|
+14|ROOT_DIR = Path(__file__).parent
+15|load_dotenv(ROOT_DIR / '.env')
+16|
+17|# MongoDB connection
+18|mongo_url = os.environ['MONGO_URL']
+19|client = AsyncIOMotorClient(mongo_url)
+20|db = client[os.environ['DB_NAME']]
+21|
+22|# Create the main app without a prefix
+23|app = FastAPI()
+24|
+25|# Create a router with the /api prefix
+26|api_router = APIRouter(prefix="/api")
+27|
+28|
+29|# Define Models
+30|class StatusCheck(BaseModel):
+31|    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
+32|    
+33|    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+34|    client_name: str
+35|    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+36|
+37|class StatusCheckCreate(BaseModel):
+38|    client_name: str
+39|
+40|# Add your routes to the router instead of directly to app
+41|@api_router.get("/")
+42|async def root():
+43|    return {"message": "Hello World"}
+44|
+45|@api_router.post("/status", response_model=StatusCheck)
+46|async def create_status_check(input: StatusCheckCreate):
+47|    status_dict = input.model_dump()
+48|    status_obj = StatusCheck(**status_dict)
+49|    
+50|    # Convert to dict and serialize datetime to ISO string for MongoDB
+51|    doc = status_obj.model_dump()
+52|    doc['timestamp'] = doc['timestamp'].isoformat()
+53|    
+54|    _ = await db.status_checks.insert_one(doc)
+55|    return status_obj
+56|
+57|@api_router.get("/status", response_model=List[StatusCheck])
+58|async def get_status_checks():
+59|    # Exclude MongoDB's _id field from the query results
+60|    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
+61|    
+62|    # Convert ISO string timestamps back to datetime objects
+63|    for check in status_checks:
+64|        if isinstance(check['timestamp'], str):
+65|            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
+66|    
+67|    return status_checks
+68|
+69|# Include the router in the main app
+70|app.include_router(api_router)
+71|
+72|app.add_middleware(
+73|    CORSMiddleware,
+74|    allow_credentials=True,
+75|    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+76|    allow_methods=["*"],
+77|    allow_headers=["*"],
+78|)
+79|
+80|# Configure logging
+81|logging.basicConfig(
+82|    level=logging.INFO,
+83|    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+84|)
+85|logger = logging.getLogger(__name__)
+86|
+87|@app.on_event("shutdown")
+88|async def shutdown_db_client():
+89|    client.close()
+
+===END
+
+===FILE: /app/backend/requirements.txt
+/app/backend/requirements.txt:
+1|fastapi==0.110.1
+2|uvicorn==0.25.0
+3|boto3>=1.34.129
+4|requests-oauthlib>=2.0.0
+5|cryptography>=42.0.8
+6|python-dotenv>=1.0.1
+7|pymongo==4.6.3
+8|pydantic>=2.6.4
+9|email-validator>=2.2.0
+10|pyjwt>=2.10.1
+11|bcrypt==4.1.3
+12|passlib>=1.7.4
+13|tzdata>=2024.2
+14|motor==3.3.1
+15|pytest>=8.0.0
+16|pytest-xdist>=3.6.0
+17|black>=24.1.1
+18|isort>=5.13.2
+19|flake8>=7.0.0
+20|mypy>=1.8.0
+21|python-jose>=3.3.0
+22|requests>=2.31.0
+23|pandas>=2.2.0
+24|numpy>=1.26.0
+25|python-multipart>=0.0.9
+26|jq>=1.6.0
+27|typer>=0.9.0
+28|emergentintegrations==0.2.0
+29|
+
+===END
+
+===FILE: /app/backend/.env
+/app/backend/.env:
+1|MONGO_URL="mongodb://localhost:27017"
+2|DB_NAME="test_database"
+3|CORS_ORIGINS="*"
+
+===END
+
+===FILE: /app/frontend/package.json
+/app/frontend/package.json:
+1|{
+2|  "name": "frontend",
+3|  "version": "0.1.0",
+4|  "private": true,
+5|  "dependencies": {
+6|    "@hookform/resolvers": "5.0.1",
+7|    "@radix-ui/react-accordion": "1.2.8",
+8|    "@radix-ui/react-alert-dialog": "1.1.11",
+9|    "@radix-ui/react-aspect-ratio": "1.1.4",
+10|    "@radix-ui/react-avatar": "1.1.7",
+11|    "@radix-ui/react-checkbox": "1.2.3",
+12|    "@radix-ui/react-collapsible": "1.1.8",
+13|    "@radix-ui/react-context-menu": "2.2.12",
+14|    "@radix-ui/react-dialog": "1.1.11",
+15|    "@radix-ui/react-dropdown-menu": "2.1.12",
+16|    "@radix-ui/react-hover-card": "1.1.11",
+17|    "@radix-ui/react-label": "2.1.4",
+18|    "@radix-ui/react-menubar": "1.1.12",
+19|    "@radix-ui/react-navigation-menu": "1.2.10",
+20|    "@radix-ui/react-popover": "1.1.11",
+21|    "@radix-ui/react-progress": "1.1.4",
+22|    "@radix-ui/react-radio-group": "1.3.4",
+23|    "@radix-ui/react-scroll-area": "1.2.6",
+24|    "@radix-ui/react-select": "2.2.2",
+25|    "@radix-ui/react-separator": "1.1.4",
+26|    "@radix-ui/react-slider": "1.3.2",
+27|    "@radix-ui/react-slot": "1.2.0",
+28|    "@radix-ui/react-switch": "1.2.2",
+29|    "@radix-ui/react-tabs": "1.1.9",
+30|    "@radix-ui/react-toast": "1.2.11",
+31|    "@radix-ui/react-toggle": "1.1.6",
+32|    "@radix-ui/react-toggle-group": "1.1.7",
+33|    "@radix-ui/react-tooltip": "1.2.4",
+34|    "@tanstack/react-query": "5.56.2",
+35|    "axios": "1.16.0",
+36|    "class-variance-authority": "0.7.1",
+37|    "clsx": "2.1.1",
+38|    "cmdk": "1.1.1",
+39|    "cra-template": "1.2.0",
+40|    "date-fns": "4.1.0",
+41|    "dayjs": "1.11.13",
+42|    "embla-carousel-react": "8.6.0",
+43|    "framer-motion": "11.18.0",
+44|    "input-otp": "1.4.2",
+45|    "lodash": "4.18.1",
+46|    "lucide-react": "0.516.0",
+47|    "next-themes": "0.4.6",
+48|    "react": "19.0.0",
+49|    "react-day-picker": "8.10.1",
+50|    "react-dom": "19.0.0",
+51|    "react-hook-form": "7.56.2",
+52|    "react-resizable-panels": "3.0.1",
+53|    "react-router-dom": "7.15.0",
+54|    "react-scripts": "5.0.1",
+55|    "recharts": "3.6.0",
+56|    "sonner": "2.0.3",
+57|    "swr": "2.3.8",
+58|    "tailwind-merge": "3.2.0",
+59|    "tailwindcss-animate": "1.0.7",
+60|    "vaul": "1.1.2",
+61|    "zod": "3.24.4"
+62|  },
+63|  "scripts": {
+64|    "start": "craco start",
+65|    "build": "craco build",
+66|    "test": "craco test"
+67|  },
+68|  "browserslist": {
+69|    "production": [
+70|      ">0.2%",
+71|      "not dead",
+72|      "not op_mini all"
+73|    ],
+74|    "development": [
+75|      "last 1 chrome version",
+76|      "last 1 firefox version",
+77|      "last 1 safari version"
+78|    ]
+79|  },
+80|  "devDependencies": {
+81|    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
+82|    "@craco/craco": "7.1.0",
+83|    "@emergentbase/visual-edits": "https://assets.emergent.sh/npm/emergentbase-visual-edits-1.0.13.tgz",
+84|    "@eslint/js": "9.23.0",
+85|    "@types/lodash": "4.17.24",
+86|    "autoprefixer": "10.4.20",
+87|    "dotenv": "16.4.5",
+88|    "eslint": "9.23.0",
+89|    "eslint-plugin-import": "2.31.0",
+90|    "eslint-plugin-jsx-a11y": "6.10.2",
+91|    "eslint-plugin-react": "7.37.4",
+92|    "eslint-plugin-react-hooks": "5.2.0",
+93|    "globals": "15.15.0",
+94|    "postcss": "8.5.10",
+95|    "tailwindcss": "3.4.17"
+96|  },
+97|  "resolutions": {
+98|    "react-router": "7.15.0",
+99|    "node-forge": "1.4.0",
+100|    "fast-uri": "3.1.2",
+101|    "flatted": "3.4.2",
+102|    "qs": "6.15.2",
+103|    "diff": "4.0.4",
+104|    "follow-redirects": "1.16.0",
+105|    "path-to-regexp": "0.1.13",
+106|    "rollup": "2.80.0",
+107|    "underscore": "1.13.8",
+108|    "@babel/plugin-transform-modules-systemjs": "7.29.4",
+109|    "@eslint/plugin-kit": "0.3.4",
+110|    "shell-quote": "1.8.4",
+111|    "jsonpath": "1.3.0",
+112|    "nth-check": "2.0.1",
+113|    "serialize-javascript": "7.0.5",
+114|    "uuid": "11.1.1",
+115|    "@tootallnate/once": "2.0.1",
+116|    "webpack-dev-server": "5.2.4",
+117|    "resolve-url-loader": "5.0.0",
+118|    "**/resolve-url-loader/postcss": "8.5.10",
+119|    "**/axios/form-data": "4.0.4",
+120|    "**/jsdom/form-data": "3.0.4",
+121|    "**/postcss-svgo/svgo": "2.8.1",
+122|    "**/webpack-dev-server/ws": "8.20.1",
+123|    "**/postcss-load-config/yaml": "2.8.3",
+124|    "**/cosmiconfig/yaml": "1.10.3",
+125|    "**/cssnano/yaml": "1.10.3",
+126|    "**/eslint/js-yaml": "4.1.1",
+127|    "**/@eslint/eslintrc/js-yaml": "4.1.1",
+128|    "**/svgo/js-yaml": "3.14.2",
+129|    "**/@istanbuljs/load-nyc-config/js-yaml": "3.14.2",
+130|    "**/css-loader/postcss": "8.5.10",
+131|    "**/css-minimizer-webpack-plugin/postcss": "8.5.10",
+132|    "**/react-scripts/postcss": "8.5.10",
+133|    "**/filelist/minimatch": "5.1.8",
+134|    "**/anymatch/picomatch": "2.3.2",
+135|    "**/micromatch/picomatch": "2.3.2",
+136|    "**/readdirp/picomatch": "2.3.2",
+137|    "**/jest-util/picomatch": "2.3.2",
+138|    "**/tinyglobby/picomatch": "4.0.4"
+139|  },
+140|  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+141|}
+142|
+
+===END
+
+===FILE: /app/frontend/.env
+/app/frontend/.env:
+1|REACT_APP_BACKEND_URL=https://laxmi-sweets-5.preview.emergentagent.com
+2|WDS_SOCKET_PORT=443
+3|ENABLE_HEALTH_CHECK=false
+
+===END
+
+===FILE: /app/frontend/src/App.js
+/app/frontend/src/App.js:
+1|import { useEffect } from "react";
+2|import "@/App.css";
+3|import { BrowserRouter, Routes, Route } from "react-router-dom";
+4|import axios from "axios";
+5|import { HOME } from "@/constants/testIds";
+6|
+7|const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+8|const API = `${BACKEND_URL}/api`;
+9|
+10|const Home = () => {
+11|  const helloWorldApi = async () => {
+12|    try {
+13|      const response = await axios.get(`${API}/`);
+14|      console.log(response.data.message);
+15|    } catch (e) {
+16|      console.error(e, `errored out requesting / api`);
+17|    }
+18|  };
+19|
+20|  useEffect(() => {
+21|    helloWorldApi();
+22|  }, []);
+23|
+24|  return (
+25|    <div>
+26|      <header className="App-header">
+27|        <a
+28|          data-testid={HOME.emergentLink}
+29|          className="App-link"
+30|          href="https://emergent.sh"
+31|          target="_blank"
+32|          rel="noopener noreferrer"
+33|        >
+34|          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
+35|        </a>
+36|        <p className="mt-5">Building something incredible ~!</p>
+37|      </header>
+38|    </div>
+39|  );
+40|};
+41|
+42|function App() {
+43|  return (
+44|    <div className="App">
+45|      <BrowserRouter>
+46|        <Routes>
+47|          <Route path="/" element={<Home />}>
+48|            <Route index element={<Home />} />
+49|          </Route>
+50|        </Routes>
+51|      </BrowserRouter>
+52|    </div>
+53|  );
+54|}
+55|
+56|export default App;
+57|
+
+===END
+
+===FILE: /app/frontend/src/App.css
+/app/frontend/src/App.css:
+1|.App-logo {
+2|    height: 40vmin;
+3|    pointer-events: none;
+4|}
+5|
+6|@media (prefers-reduced-motion: no-preference) {
+7|    .App-logo {
+8|        animation: App-logo-spin infinite 20s linear;
+9|    }
+10|}
+11|
+12|.App-header {
+13|    background-color: #0f0f10;
+14|    min-height: 100vh;
+15|    display: flex;
+16|    flex-direction: column;
+17|    align-items: center;
+18|    justify-content: center;
+19|    font-size: calc(10px + 2vmin);
+20|    color: white;
+21|}
+22|
+23|.App-link {
+24|    color: #61dafb;
+25|}
+26|
+27|@keyframes App-logo-spin {
+28|    from {
+29|        transform: rotate(0deg);
+30|    }
+31|    to {
+32|        transform: rotate(360deg);
+33|    }
+34|}
+35|
+
+===END
+
+===FILE: /app/frontend/src/index.css
+/app/frontend/src/index.css:
+1|@tailwind base;
+2|@tailwind components;
+3|@tailwind utilities;
+4|
+5|body {
+6|    margin: 0;
+7|    font-family:
+8|        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+9|        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+10|        sans-serif;
+11|    -webkit-font-smoothing: antialiased;
+12|    -moz-osx-font-smoothing: grayscale;
+13|}
+14|
+15|code {
+16|    font-family:
+17|        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+18|}
+19|
+20|@layer base {
+21|    :root {
+22|        --background: 0 0% 100%;
+23|        --foreground: 0 0% 3.9%;
+24|        --card: 0 0% 100%;
+25|        --card-foreground: 0 0% 3.9%;
+26|        --popover: 0 0% 100%;
+27|        --popover-foreground: 0 0% 3.9%;
+28|        --primary: 0 0% 9%;
+29|        --primary-foreground: 0 0% 98%;
+30|        --secondary: 0 0% 96.1%;
+31|        --secondary-foreground: 0 0% 9%;
+32|        --muted: 0 0% 96.1%;
+33|        --muted-foreground: 0 0% 45.1%;
+34|        --accent: 0 0% 96.1%;
+35|        --accent-foreground: 0 0% 9%;
+36|        --destructive: 0 84.2% 60.2%;
+37|        --destructive-foreground: 0 0% 98%;
+38|        --border: 0 0% 89.8%;
+39|        --input: 0 0% 89.8%;
+40|        --ring: 0 0% 3.9%;
+41|        --chart-1: 12 76% 61%;
+42|        --chart-2: 173 58% 39%;
+43|        --chart-3: 197 37% 24%;
+44|        --chart-4: 43 74% 66%;
+45|        --chart-5: 27 87% 67%;
+46|        --radius: 0.5rem;
+47|    }
+48|    .dark {
+49|        --background: 0 0% 3.9%;
+50|        --foreground: 0 0% 98%;
+51|        --card: 0 0% 3.9%;
+52|        --card-foreground: 0 0% 98%;
+53|        --popover: 0 0% 3.9%;
+54|        --popover-foreground: 0 0% 98%;
+55|        --primary: 0 0% 98%;
+56|        --primary-foreground: 0 0% 9%;
+57|        --secondary: 0 0% 14.9%;
+58|        --secondary-foreground: 0 0% 98%;
+59|        --muted: 0 0% 14.9%;
+60|        --muted-foreground: 0 0% 63.9%;
+61|        --accent: 0 0% 14.9%;
+62|        --accent-foreground: 0 0% 98%;
+63|        --destructive: 0 62.8% 30.6%;
+64|        --destructive-foreground: 0 0% 98%;
+65|        --border: 0 0% 14.9%;
+66|        --input: 0 0% 14.9%;
+67|        --ring: 0 0% 83.1%;
+68|        --chart-1: 220 70% 50%;
+69|        --chart-2: 160 60% 45%;
+70|        --chart-3: 30 80% 55%;
+71|        --chart-4: 280 65% 60%;
+72|        --chart-5: 340 75% 55%;
+73|    }
+74|}
+75|
+76|@layer base {
+77|    * {
+78|        @apply border-border;
+79|    }
+80|    body {
+81|        @apply bg-background text-foreground;
+82|    }
+83|}
+84|
+85|@layer base {
+86|    [data-debug-wrapper="true"] {
+87|        display: contents !important;
+88|    }
+89|
+90|    [data-debug-wrapper="true"] > * {
+91|        margin-left: inherit;
+92|        margin-right: inherit;
+93|        margin-top: inherit;
+94|        margin-bottom: inherit;
+95|        padding-left: inherit;
+96|        padding-right: inherit;
+97|        padding-top: inherit;
+98|        padding-bottom: inherit;
+99|        column-gap: inherit;
+100|        row-gap: inherit;
+101|        gap: inherit;
+102|        border-left-width: inherit;
+103|        border-right-width: inherit;
+104|        border-top-width: inherit;
+105|        border-bottom-width: inherit;
+106|        border-left-style: inherit;
+107|        border-right-style: inherit;
+108|        border-top-style: inherit;
+109|        border-bottom-style: inherit;
+110|        border-left-color: inherit;
+111|        border-right-color: inherit;
+112|        border-top-color: inherit;
+113|        border-bottom-color: inherit;
+114|    }
+115|}
+116|
+
+===END
+
+===FILE: /app/frontend/src/index.js
+/app/frontend/src/index.js:
+1|import React from "react";
+2|import ReactDOM from "react-dom/client";
+3|import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+4|import "@/index.css";
+5|import App from "@/App";
+6|
+7|const queryClient = new QueryClient({
+8|  defaultOptions: {
+9|    queries: {
+10|      staleTime: 60_000,
+11|      refetchOnWindowFocus: false,
+12|    },
+13|  },
+14|});
+15|
+16|const root = ReactDOM.createRoot(document.getElementById("root"));
+17|root.render(
+18|  <React.StrictMode>
+19|    <QueryClientProvider client={queryClient}>
+20|      <App />
+21|    </QueryClientProvider>
+22|  </React.StrictMode>,
+23|);
+24|
+
+===END
+
+===FILE: /app/frontend/tailwind.config.js
+/app/frontend/tailwind.config.js:
+1|/** @type {import('tailwindcss').Config} */
+2|module.exports = {
+3|    darkMode: ["class"],
+4|    content: [
+5|    "./src/**/*.{js,jsx,ts,tsx}",
+6|    "./public/index.html"
+7|  ],
+8|  theme: {
+9|    extend: {
+10|      borderRadius: {
+11|        lg: 'var(--radius)',
+12|        md: 'calc(var(--radius) - 2px)',
+13|        sm: 'calc(var(--radius) - 4px)'
+14|      },
+15|      colors: {
+16|        background: 'hsl(var(--background))',
+17|        foreground: 'hsl(var(--foreground))',
+18|        card: {
+19|          DEFAULT: 'hsl(var(--card))',
+20|          foreground: 'hsl(var(--card-foreground))'
+21|        },
+22|        popover: {
+23|          DEFAULT: 'hsl(var(--popover))',
+24|          foreground: 'hsl(var(--popover-foreground))'
+25|        },
+26|        primary: {
+27|          DEFAULT: 'hsl(var(--primary))',
+28|          foreground: 'hsl(var(--primary-foreground))'
+29|        },
+30|        secondary: {
+31|          DEFAULT: 'hsl(var(--secondary))',
+32|          foreground: 'hsl(var(--secondary-foreground))'
+33|        },
+34|        muted: {
+35|          DEFAULT: 'hsl(var(--muted))',
+36|          foreground: 'hsl(var(--muted-foreground))'
+37|        },
+38|        accent: {
+39|          DEFAULT: 'hsl(var(--accent))',
+40|          foreground: 'hsl(var(--accent-foreground))'
+41|        },
+42|        destructive: {
+43|          DEFAULT: 'hsl(var(--destructive))',
+44|          foreground: 'hsl(var(--destructive-foreground))'
+45|        },
+46|        border: 'hsl(var(--border))',
+47|        input: 'hsl(var(--input))',
+48|        ring: 'hsl(var(--ring))',
+49|        chart: {
+50|          '1': 'hsl(var(--chart-1))',
+51|          '2': 'hsl(var(--chart-2))',
+52|          '3': 'hsl(var(--chart-3))',
+53|          '4': 'hsl(var(--chart-4))',
+54|          '5': 'hsl(var(--chart-5))'
+55|        }
+56|      },
+57|      keyframes: {
+58|        'accordion-down': {
+59|          from: {
+60|            height: '0'
+61|          },
+62|          to: {
+63|            height: 'var(--radix-accordion-content-height)'
+64|          }
+65|        },
+66|        'accordion-up': {
+67|          from: {
+68|            height: 'var(--radix-accordion-content-height)'
+69|          },
+70|          to: {
+71|            height: '0'
+72|          }
+73|        }
+74|      },
+75|      animation: {
+76|        'accordion-down': 'accordion-down 0.2s ease-out',
+77|        'accordion-up': 'accordion-up 0.2s ease-out'
+78|      }
+79|    }
+80|  },
+81|  plugins: [require("tailwindcss-animate")],
+82|};
+
+===END
+
+Action: {"type": "mcp_tool", "tool_name": "mcp_view_bulk", "tool_arguments": {"paths": ["/app/design_guidelines.json"]}}
+Observation: ===FILE: /app/design_guidelines.json
+/app/design_guidelines.json:
+1|{
+2|  "theme": "hybrid_fullstack",
+3|  "project_name": "Shree Laxmi Dairy & Sweets",
+4|  "description": "Premium modern Indian sweets & dairy e-commerce website with a robust admin dashboard.",
+5|  "global_rules": [
+6|    "DO NOT use generic centered layouts. Create asymmetrical balance.",
+7|    "DO NOT use pure black (#000000) or pure gray. Tint neutrals with warm tones.",
+8|    "Use glass-morphism effects with backdrop filters (12-24px blur) for sticky navs and dialogs.",
+9|    "Implement smooth scrolling using framer-motion or native smooth scroll.",
+10|    "All interactive elements MUST have hover/focus states.",
+11|    "All interactive and key informational elements MUST include a data-testid attribute.",
+12|    "DO NOT use completely transparent backgrounds for overlays or headers. Always add a blur or semi-solid color.",
+13|    "DO NOT use Inter or Roboto for headings."
+14|  ],
+15|  "typography": {
+16|    "font_pairing": "Cormorant Garamond (Headings) + DM Sans (Body)",
+17|    "rules": {
+18|      "headings": "font-serif tracking-tight text-[#8B0000]",
+19|      "subheadings": "uppercase tracking-[0.2em] text-xs font-semibold text-[#D4A017]",
+20|      "body": "font-sans leading-relaxed text-[#2D2522]",
+21|      "sizes": {
+22|        "h1": "text-4xl sm:text-5xl lg:text-6xl",
+23|        "h2": "text-2xl sm:text-3xl lg:text-4xl",
+24|        "h3": "text-xl sm:text-2xl",
+25|        "h4": "text-lg sm:text-xl",
+26|        "body": "text-base sm:text-sm"
+27|      }
+28|    },
+29|    "installation": "Google Fonts: @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap');"
+30|  },
+31|  "colors": {
+32|    "archetype": "LUXURY & TRADITIONAL INDIAN",
+33|    "palette": {
+34|      "background": "#FFF8E7",
+35|      "surface": "#FFFFFF",
+36|      "primary": "#8B0000",
+37|      "primary_hover": "#660000",
+38|      "secondary": "#F59E0B",
+39|      "secondary_hover": "#D97706",
+40|      "accent_gold": "#D4A017",
+41|      "text_main": "#2D2522",
+42|      "text_muted": "#5C4D47",
+43|      "border": "#Eaddce",
+44|      "admin_bg": "#F9FAFB"
+45|    },
+46|    "rules": {
+47|      "gradients": "Avoid flat gradients. Use subtle radial glows or noise textures over solid colors.",
+48|      "contrast": "Ensure text over primary buttons is pure white. Use text shadow if placing text over hero images."
+49|    }
+50|  },
+51|  "visual_enhancers": {
+52|    "shadows": {
+53|      "card": "shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+54|      "hover": "shadow-[0_20px_40px_rgb(139,0,0,0.08)]",
+55|      "dropdown": "shadow-[0_10px_40px_rgb(0,0,0,0.1)]"
+56|    },
+57|    "borders": {
+58|      "radius": "rounded-xl for cards, rounded-full for pills/badges, rounded-none for sharp luxury edges (optional mix)",
+59|      "width": "1px subtle borders using #D4A017 (Gold) at 20% opacity for luxury feel."
+60|    },
+61|    "textures": "Subtle SVG patterns (mandala/paisley) in the background with 3-5% opacity. Very faint grain on dark maroon banners."
+62|  },
+63|  "layouts": {
+64|    "spacing_system": "Generous. Use p-8 to p-16 for section padding. gap-8 to gap-12 for bento grids.",
+65|    "e_commerce": {
+66|      "hero": "Full height or 80vh with dark overlay (bg-black/40) over shop image. Centered or left-aligned typography.",
+67|      "product_grid": "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4. High density but with generous internal card padding.",
+68|      "category_nav": "Horizontal scrollable pill list or circular image links."
+69|    },
+70|    "admin_dashboard": {
+71|      "structure": "Sidebar + Main Content. Dense grid (grid-cols-1 md:grid-cols-3 lg:grid-cols-4).",
+72|      "widgets": "Flat backgrounds, 1px subtle border, sharp or slightly rounded (rounded-lg)."
+73|    }
+74|  },
+75|  "components": {
+76|    "buttons": {
+77|      "primary": "bg-[#8B0000] text-white hover:bg-[#660000] transition-colors rounded-full px-6 py-3 font-medium",
+78|      "outline": "border border-[#D4A017] text-[#8B0000] hover:bg-[#FFF8E7] rounded-full px-6 py-3 font-medium"
+79|    },
+80|    "cards": {
+81|      "product": "bg-white rounded-2xl overflow-hidden border border-transparent hover:border-[#D4A017]/30 transition-all duration-300 group"
+82|    },
+83|    "navigation": "Sticky top, backdrop-blur-xl bg-[#FFF8E7]/80 border-b border-[#D4A017]/20. Links should have hover animations.",
+84|    "toast": "Use Sonner. Position top-right or bottom-center. Style to match theme (maroon/gold accents)."
+85|  },
+86|  "motion": {
+87|    "libraries": ["framer-motion"],
+88|    "patterns": {
+89|      "page_load": "Fade in and slight slide up (y: 20 -> 0) for main sections.",
+90|      "hover": "Scale image inside product card by 105%.",
+91|      "cart_drawer": "Slide in from right."
+92|    }
+93|  },
+94|  "media": {
+95|    "icons": "lucide-react (default). Use stroke-width 1.5 for elegance.",
+96|    "images": {
+97|      "hero_storefront": "https://customer-assets.emergentagent.com/job_laxmi-sweets-5/artifacts/g9fe5911_IMG_20260714_132908.jpg",
+98|      "display_case_sweets": "https://customer-assets.emergentagent.com/job_laxmi-sweets-5/artifacts/rc00wgb8_IMG_20260714_132827.jpg",
+99|      "display_case_cakes": "https://customer-assets.emergentagent.com/job_laxmi-sweets-5/artifacts/0x2rh4d9_IMG_20260714_132843.jpg",
+100|      "gulab_jamun": "https://images.unsplash.com/photo-1710354473160-dafce976c2df?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwyfHxpbmRpYW4lMjBmb29kJTIwZGVzc2VydCUyMGd1bGFiJTIwamFtdW4lMjBvciUyMHJhc2d1bGxhfGVufDB8fHx8MTc4NDAxNjMzMXww&ixlib=rb-4.1.0&q=85",
+101|      "rasgulla": "https://images.unsplash.com/photo-1710354473051-5c33cc333406?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjBmb29kJTIwZGVzc2VydCUyMGd1bGFiJTIwamFtdW4lMjBvciUyMHJhc2d1bGxhfGVufDB8fHx8MTc4NDAxNjMzMXww&ixlib=rb-4.1.0&q=85",
+102|      "lassi_kulhad": "https://images.unsplash.com/photo-1675064982913-067b64880f5f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwyfHxnbGFzcyUyMG9mJTIwbGFzc2klMjBvciUyMG1pbGt8ZW58MHx8fHwxNzg0MDE2MzMwfDA&ixlib=rb-4.1.0&q=85",
+103|      "rose_lassi": "https://images.unsplash.com/photo-1692620609860-be6717812f71?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxnbGFzcyUyMG9mJTIwbGFzc2klMjBvciUyMG1pbGt8ZW58MHx8fHwxNzg0MDE2MzMwfDA&ixlib=rb-4.1.0&q=85",
+104|      "paneer": "https://images.unsplash.com/photo-1630748661719-875c3b7ebfb7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHwyfHxmcmVzaCUyMHBhbmVlciUyMGRhaXJ5JTIwYmxvY2tzfGVufDB8fHx8MTc4NDAxNjMxN3ww&ixlib=rb-4.1.0&q=85",
+105|      "ghee": "https://images.unsplash.com/photo-1605880980331-20a711b27338?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MTN8MHwxfHNlYXJjaHwyfHxnaGVlJTIwamFyJTIwdHJhZGl0aW9uYWx8ZW58MHx8fHwxNzg0MDE2MzE3fDA&ixlib=rb-4.1.0&q=85",
+106|      "assorted_sweets": "https://images.unsplash.com/photo-1758910536889-43ce7b3199fd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBzd2VldHMlMjBtaXRoYWklMjBjb2xvcmZ1bHxlbnwwfHx8fDE3ODQwMTYzMTd8MA&ixlib=rb-4.1.0&q=85",
+107|      "assorted_sweets_2": "https://images.unsplash.com/photo-1782033032439-a2c656ca2f59?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxpbmRpYW4lMjBzd2VldHMlMjBtaXRoYWklMjBjb2xvcmZ1bHxlbnwwfHx8fDE3ODQwMTYzMTd8MA&ixlib=rb-4.1.0&q=85"
+108|    }
+109|  },
+110|  "instructions_to_main_agent": [
+111|    "Prioritize a premium, elegant aesthetic. Use the provided deep maroon and gold colors deliberately.",
+112|    "Implement the font stack correctly: Cormorant Garamond for headings, DM Sans for body.",
+113|    "For the E-commerce side: build a rich, image-heavy product catalog, interactive cart drawer, and seamless Razorpay mocked checkout.",
+114|    "For the Admin Dashboard: Ensure data density. Use a clean, bento-grid style with clear status indicators.",
+115|    "Ensure the hero section uses one of the provided shop interior images with a strong overlay so the typography pops.",
+116|    "Mock the authentication using JWT, Mock the Razorpay payment gateway, implement multi-step checkout.",
+117|    "Incorporate the order tracking page as a visual pipeline (Pending -> Confirmed -> Preparing -> Out for Delivery -> Delivered).",
+118|    "Ensure all components and routes are mobile-responsive.",
+119|    "Add 'data-testid' to all buttons, links, and forms."
+120|  ]
+121|}
+
+===END
+
+Action: file_editor create /app/backend/server.py --file-text "\"\"\"Shree Laxmi Dairy & Sweets - Backend API.\"\"\"
+import os
+import uuid
+import logging
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import List, Optional, Literal
+
+import bcrypt
+import jwt as pyjwt
+from dotenv import load_dotenv
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
+
+# ============================================================================
+# Setup
+# ============================================================================
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / \".env\")
+
+MONGO_URL = os.environ[\"MONGO_URL\"]
+DB_NAME = os.environ[\"DB_NAME\"]
+JWT_SECRET = os.environ[\"JWT_SECRET\"]
+JWT_ALGORITHM = os.environ.get(\"JWT_ALGORITHM\", \"HS256\")
+JWT_EXPIRE_HOURS = int(os.environ.get(\"JWT_EXPIRE_HOURS\", \"168\"))
+
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
+
+app = FastAPI(title=\"Shree Laxmi Dairy & Sweets API\")
+
+# Serve product images
+STATIC_DIR = ROOT_DIR / \"static\"
+STATIC_DIR.mkdir(exist_ok=True)
+(STATIC_DIR / \"products\").mkdir(exist_ok=True)
+app.mount(\"/static\", StaticFiles(directory=str(STATIC_DIR)), name=\"static\")
+
+api = APIRouter(prefix=\"/api\")
+security = HTTPBearer(auto_error=False)
+
+logging.basicConfig(level=logging.INFO, format=\"%(asctime)s %(levelname)s %(message)s\")
+log = logging.getLogger(\"laxmi\")
+
+# ============================================================================
+# Utils
+# ============================================================================
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_id() -> str:
+    return str(uuid.uuid4())
+
+
+def hash_password(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(pw: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(pw.encode(), hashed.encode())
+    except Exception:
+        return False
+
+
+def make_token(user_id: str, role: str) -> str:
+    payload = {
+        \"sub\": user_id,
+        \"role\": role,
+        \"exp\": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def current_user(cred: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if not cred:
+        raise HTTPException(401, \"Not authenticated\")
+    try:
+        payload = pyjwt.decode(cred.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except pyjwt.PyJWTError:
+        raise HTTPException(401, \"Invalid token\")
+    user = await db.users.find_one({\"id\": payload[\"sub\"]}, {\"_id\": 0, \"password_hash\": 0})
+    if not user:
+        raise HTTPException(401, \"User not found\")
+    return user
+
+
+async def admin_user(user=Depends(current_user)):
+    if user.get(\"role\") != \"admin\":
+        raise HTTPException(403, \"Admin only\")
+    return user
+
+
+async def optional_user(cred: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if not cred:
+        return None
+    try:
+        payload = pyjwt.decode(cred.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return await db.users.find_one({\"id\": payload[\"sub\"]}, {\"_id\": 0, \"password_hash\": 0})
+    except Exception:
+        return None
+
+
+# ============================================================================
+# Models
+# ============================================================================
+class RegisterInput(BaseModel):
+    name: str
+    email: EmailStr
+    phone: str
+    password: str = Field(min_length=6)
+
+
+class LoginInput(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class Product(BaseModel):
+    model_config = ConfigDict(extra=\"ignore\")
+    id: str = Field(default_factory=new_id)
+    name: str
+    slug: str
+    category: str
+    description: str
+    price: float
+    weight: str = \"500g\"
+    image: str
+    stock: int = 100
+    featured: bool = False
+    tags: List[str] = []
+    created_at: str = Field(default_factory=now_iso)
+
+
+class ProductInput(BaseModel):
+    name: str
+    category: str
+    description: str
+    price: float
+    weight: str = \"500g\"
+    image: str
+    stock: int = 100
+    featured: bool = False
+    tags: List[str] = []
+
+
+class Address(BaseModel):
+    full_name: str
+    phone: str
+    line1: str
+    line2: str = \"\"
+    city: str
+    state: str
+    pincode: str
+    landmark: str = \"\"
+
+
+class CartItem(BaseModel):
+    product_id: str
+    name: str
+    price: float
+    image: str
+    weight: str
+    quantity: int
+
+
+class OrderInput(BaseModel):
+    items: List[CartItem]
+    address: Address
+    notes: str = \"\"
+
+
+ORDER_STATUSES = [\"pending\", \"confirmed\", \"preparing\", \"out_for_delivery\", \"delivered\", \"cancelled\"]
+
+
+class SiteContent(BaseModel):
+    hero_title: str = \"Taste of Tradition,\nCrafted with Love\"
+    hero_subtitle: str = \"Authentic Indian sweets, fresh dairy and pure ghee — delivered to your doorstep from Surat's most-loved sweet shop.\"
+    tagline: str = \"Established with a legacy of pure taste\"
+    phone: str = \"+91 98258 24175\"
+    whatsapp: str = \"919825824175\"
+    email: str = \"shreelaxmidairy@gmail.com\"
+    address: str = \"A-78, Ved Rd, near Akhand Anand College, Vishram Nagar, Tribhuvan Nagar, Singanpor, Surat, Gujarat 395004\"
+    hours: str = \"Open Daily · 7:00 AM – 10:10 PM\"
+    instagram: str = \"shreelaxmidairyandsweets\"
+    facebook: str = \"shreelaxmidairy\"
+
+
+# ============================================================================
+# Auth Routes
+# ============================================================================
+@api.post(\"/auth/register\")
+async def register(inp: RegisterInput):
+    if await db.users.find_one({\"email\": inp.email.lower()}):
+        raise HTTPException(400, \"Email already registered\")
+    user = {
+        \"id\": new_id(),
+        \"name\": inp.name,
+        \"email\": inp.email.lower(),
+        \"phone\": inp.phone,
+        \"password_hash\": hash_password(inp.password),
+        \"role\": \"customer\",
+        \"created_at\": now_iso(),
+    }
+    await db.users.insert_one(user)
+    token = make_token(user[\"id\"], user[\"role\"])
+    return {\"token\": token, \"user\": {k: v for k, v in user.items() if k not in (\"password_hash\", \"_id\")}}
+
+
+@api.post(\"/auth/login\")
+async def login(inp: LoginInput):
+    user = await db.users.find_one({\"email\": inp.email.lower()})
+    if not user or not verify_password(inp.password, user[\"password_hash\"]):
+        raise HTTPException(401, \"Invalid email or password\")
+    token = make_token(user[\"id\"], user[\"role\"])
+    user.pop(\"password_hash\", None)
+    user.pop(\"_id\", None)
+    return {\"token\": token, \"user\": user}
+
+
+@api.get(\"/auth/me\")
+async def me(user=Depends(current_user)):
+    return user
+
+
+# ============================================================================
+# Product Routes
+# ============================================================================
+@api.get(\"/products\")
+async def list_products(category: Optional[str] = None, search: Optional[str] = None, featured: Optional[bool] = None):
+    q = {}
+    if category and category != \"all\":
+        q[\"category\"] = category
+    if featured is not None:
+        q[\"featured\"] = featured
+    if search:
+        q[\"$or\"] = [
+            {\"name\": {\"$regex\": search, \"$options\": \"i\"}},
+            {\"description\": {\"$regex\": search, \"$options\": \"i\"}},
+        ]
+    items = await db.products.find(q, {\"_id\": 0}).sort(\"created_at\", -1).to_list(500)
+    return items
+
+
+@api.get(\"/products/categories\")
+async def list_categories():
+    cats = await db.products.distinct(\"category\")
+    return sorted(cats)
+
+
+@api.get(\"/products/{product_id}\")
+async def get_product(product_id: str):
+    p = await db.products.find_one({\"id\": product_id}, {\"_id\": 0})
+    if not p:
+        raise HTTPException(404, \"Product not found\")
+    return p
+
+
+# ============================================================================
+# Admin: Products
+# ============================================================================
+def _slugify(name: str) -> str:
+    return \"-\".join(name.lower().split())[:60] + \"-\" + new_id()[:6]
+
+
+@api.post(\"/admin/products\")
+async def create_product(inp: ProductInput, _=Depends(admin_user)):
+    p = Product(**inp.model_dump(), slug=_slugify(inp.name))
+    await db.products.insert_one(p.model_dump())
+    return p.model_dump()
+
+
+@api.put(\"/admin/products/{product_id}\")
+async def update_product(product_id: str, inp: ProductInput, _=Depends(admin_user)):
+    upd = inp.model_dump()
+    r = await db.products.update_one({\"id\": product_id}, {\"$set\": upd})
+    if r.matched_count == 0:
+        raise HTTPException(404, \"Not found\")
+    return await db.products.find_one({\"id\": product_id}, {\"_id\": 0})
+
+
+@api.delete(\"/admin/products/{product_id}\")
+async def delete_product(product_id: str, _=Depends(admin_user)):
+    r = await db.products.delete_one({\"id\": product_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, \"Not found\")
+    return {\"ok\": True}
+
+
+# ============================================================================
+# Orders
+# ============================================================================
+def _calc_totals(items: List[dict]):
+    subtotal = sum(i[\"price\"] * i[\"quantity\"] for i in items)
+    delivery = 0.0 if subtotal >= 500 else 40.0
+    tax = round(subtotal * 0.05, 2)
+    total = round(subtotal + delivery + tax, 2)
+    return round(subtotal, 2), delivery, tax, total
+
+
+def _order_number() -> str:
+    return \"LX\" + datetime.now().strftime(\"%y%m%d\") + str(uuid.uuid4().int)[:5]
+
+
+@api.post(\"/orders\")
+async def create_order(inp: OrderInput, user=Depends(current_user)):
+    if not inp.items:
+        raise HTTPException(400, \"Cart empty\")
+    items = [i.model_dump() for i in inp.items]
+    subtotal, delivery, tax, total = _calc_totals(items)
+    order = {
+        \"id\": new_id(),
+        \"order_number\": _order_number(),
+        \"user_id\": user[\"id\"],
+        \"customer_name\": user[\"name\"],
+        \"customer_email\": user[\"email\"],
+        \"customer_phone\": user[\"phone\"],
+        \"items\": items,
+        \"address\": inp.address.model_dump(),
+        \"notes\": inp.notes,
+        \"subtotal\": subtotal,
+        \"delivery_fee\": delivery,
+        \"tax\": tax,
+        \"total\": total,
+        \"status\": \"pending\",
+        \"payment_status\": \"pending\",
+        \"payment_id\": None,
+        \"razorpay_order_id\": None,
+        \"status_history\": [{\"status\": \"pending\", \"at\": now_iso(), \"note\": \"Order placed\"}],
+        \"created_at\": now_iso(),
+        \"updated_at\": now_iso(),
+    }
+    await db.orders.insert_one(order)
+    order.pop(\"_id\", None)
+    return order
+
+
+@api.get(\"/orders/mine\")
+async def my_orders(user=Depends(current_user)):
+    orders = await db.orders.find({\"user_id\": user[\"id\"]}, {\"_id\": 0}).sort(\"created_at\", -1).to_list(200)
+    return orders
+
+
+@api.get(\"/orders/track/{order_number}\")
+async def track_order(order_number: str):
+    o = await db.orders.find_one({\"order_number\": order_number.upper()}, {\"_id\": 0})
+    if not o:
+        raise HTTPException(404, \"Order not found\")
+    # Return limited fields for public tracking
+    return {
+        \"order_number\": o[\"order_number\"],
+        \"customer_name\": o[\"customer_name\"],
+        \"status\": o[\"status\"],
+        \"status_history\": o[\"status_history\"],
+        \"items\": o[\"items\"],
+        \"total\": o[\"total\"],
+        \"address\": {\"city\": o[\"address\"][\"city\"], \"pincode\": o[\"address\"][\"pincode\"]},
+        \"created_at\": o[\"created_at\"],
+    }
+
+
+@api.get(\"/orders/{order_id}\")
+async def get_order(order_id: str, user=Depends(current_user)):
+    o = await db.orders.find_one({\"id\": order_id}, {\"_id\": 0})
+    if not o:
+        raise HTTPException(404, \"Not found\")
+    if user[\"role\"] != \"admin\" and o[\"user_id\"] != user[\"id\"]:
+        raise HTTPException(403, \"Forbidden\")
+    return o
+
+
+# ============================================================================
+# Admin: Orders & Customers & Analytics
+# ============================================================================
+class StatusUpdate(BaseModel):
+    status: Literal[\"pending\", \"confirmed\", \"preparing\", \"out_for_delivery\", \"delivered\", \"cancelled\"]
+    note: str = \"\"
+
+
+@api.get(\"/admin/orders\")
+async def admin_orders(status_filter: Optional[str] = Query(None, alias=\"status\"), _=Depends(admin_user)):
+    q = {}
+    if status_filter:
+        q[\"status\"] = status_filter
+    orders = await db.orders.find(q, {\"_id\": 0}).sort(\"created_at\", -1).to_list(500)
+    return orders
+
+
+@api.patch(\"/admin/orders/{order_id}/status\")
+async def update_order_status(order_id: str, upd: StatusUpdate, _=Depends(admin_user)):
+    o = await db.orders.find_one({\"id\": order_id})
+    if not o:
+        raise HTTPException(404, \"Not found\")
+    history = o.get(\"status_history\", [])
+    history.append({\"status\": upd.status, \"at\": now_iso(), \"note\": upd.note or f\"Status changed to {upd.status}\"})
+    await db.orders.update_one(
+        {\"id\": order_id},
+        {\"$set\": {\"status\": upd.status, \"status_history\": history, \"updated_at\": now_iso()}},
+    )
+    return await db.orders.find_one({\"id\": order_id}, {\"_id\": 0})
+
+
+@api.get(\"/admin/customers\")
+async def admin_customers(_=Depends(admin_user)):
+    users = await db.users.find({\"role\": \"customer\"}, {\"_id\": 0, \"password_hash\": 0}).to_list(1000)
+    for u in users:
+        u[\"order_count\"] = await db.orders.count_documents({\"user_id\": u[\"id\"]})
+        agg = await db.orders.aggregate(
+            [{\"$match\": {\"user_id\": u[\"id\"], \"payment_status\": \"paid\"}}, {\"$group\": {\"_id\": None, \"sum\": {\"$sum\": \"$total\"}}}]
+        ).to_list(1)
+        u[\"total_spent\"] = round(agg[0][\"sum\"], 2) if agg else 0
+    return users
+
+
+@api.get(\"/admin/analytics\")
+async def admin_analytics(_=Depends(admin_user)):
+    total_orders = await db.orders.count_documents({})
+    paid_orders = await db.orders.count_documents({\"payment_status\": \"paid\"})
+    total_customers = await db.users.count_documents({\"role\": \"customer\"})
+    total_products = await db.products.count_documents({})
+
+    rev_agg = await db.orders.aggregate(
+        [{\"$match\": {\"payment_status\": \"paid\"}}, {\"$group\": {\"_id\": None, \"revenue\": {\"$sum\": \"$total\"}}}]
+    ).to_list(1)
+    revenue = round(rev_agg[0][\"revenue\"], 2) if rev_agg else 0
+
+    # Status breakdown
+    status_agg = await db.orders.aggregate([{\"$group\": {\"_id\": \"$status\", \"count\": {\"$sum\": 1}}}]).to_list(20)
+    status_counts = {s[\"_id\"]: s[\"count\"] for s in status_agg}
+
+    # Top products (by quantity across all paid orders)
+    top_agg = await db.orders.aggregate(
+        [
+            {\"$match\": {\"payment_status\": \"paid\"}},
+            {\"$unwind\": \"$items\"},
+            {
+                \"$group\": {
+                    \"_id\": \"$items.product_id\",
+                    \"name\": {\"$first\": \"$items.name\"},
+                    \"image\": {\"$first\": \"$items.image\"},
+                    \"qty\": {\"$sum\": \"$items.quantity\"},
+                    \"revenue\": {\"$sum\": {\"$multiply\": [\"$items.price\", \"$items.quantity\"]}},
+                }
+            },
+            {\"$sort\": {\"qty\": -1}},
+            {\"$limit\": 5},
+        ]
+    ).to_list(5)
+
+    # Daily revenue last 7 days
+    daily = []
+    for i in range(6, -1, -1):
+        day = (datetime.now(timezone.utc) - timedelta(days=i)).date().isoformat()
+        agg = await db.orders.aggregate(
+            [
+                {\"$match\": {\"payment_status\": \"paid\", \"created_at\": {\"$regex\": f\"^{day}\"}}},
+                {\"$group\": {\"_id\": None, \"rev\": {\"$sum\": \"$total\"}, \"cnt\": {\"$sum\": 1}}},
+            ]
+        ).to_list(1)
+        daily.append({\"date\": day, \"revenue\": round(agg[0][\"rev\"], 2) if agg else 0, \"orders\": agg[0][\"cnt\"] if agg else 0})
+
+    return {
+        \"total_orders\": total_orders,
+        \"paid_orders\": paid_orders,
+        \"total_customers\": total_customers,
+        \"total_products\": total_products,
+        \"revenue\": revenue,
+        \"status_counts\": status_counts,
+        \"top_products\": top_agg,
+        \"daily\": daily,
+    }
+
+
+# ============================================================================
+# Admin: Site content
+# ============================================================================
+@api.get(\"/site-content\")
+async def get_site_content():
+    doc = await db.site_content.find_one({\"id\": \"main\"}, {\"_id\": 0})
+    if not doc:
+        default = SiteContent().model_dump()
+        default[\"id\"] = \"main\"
+        await db.site_content.insert_one(default)
+        return {k: v for k, v in default.items() if k != \"id\"}
+    doc.pop(\"id\", None)
+    return doc
+
+
+@api.put(\"/admin/site-content\")
+async def update_site_content(content: SiteContent, _=Depends(admin_user)):
+    doc = content.model_dump()
+    await db.site_content.update_one({\"id\": \"main\"}, {\"$set\": doc}, upsert=True)
+    return doc
+
+
+# ============================================================================
+# Payments (MOCKED Razorpay)
+# ============================================================================
+class CreatePaymentInput(BaseModel):
+    order_id: str
+
+
+class VerifyPaymentInput(BaseModel):
+    order_id: str
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str = \"mock_signature\"
+
+
+@api.post(\"/payments/create-order\")
+async def create_payment_order(inp: CreatePaymentInput, user=Depends(current_user)):
+    \"\"\"MOCKED Razorpay order creation. Replace with real razorpay client when keys are added.\"\"\"
+    o = await db.orders.find_one({\"id\": inp.order_id})
+    if not o:
+        raise HTTPException(404, \"Order not found\")
+    if o[\"user_id\"] != user[\"id\"]:
+        raise HTTPException(403, \"Forbidden\")
+    razorpay_order_id = f\"order_mock_{uuid.uuid4().hex[:16]}\"
+    await db.orders.update_one({\"id\": inp.order_id}, {\"$set\": {\"razorpay_order_id\": razorpay_order_id}})
+    return {
+        \"razorpay_order_id\": razorpay_order_id,
+        \"amount\": int(o[\"total\"] * 100),  # paisa
+        \"currency\": \"INR\",
+        \"key_id\": os.environ.get(\"RAZORPAY_KEY_ID\") or \"rzp_test_mock_key\",
+        \"mocked\": True,
+    }
+
+
+@api.post(\"/payments/verify\")
+async def verify_payment(inp: VerifyPaymentInput, user=Depends(current_user)):
+    \"\"\"MOCKED verification. In production, verify signature with razorpay_utility.\"\"\"
+    o = await db.orders.find_one({\"id\": inp.order_id})
+    if not o:
+        raise HTTPException(404, \"Order not found\")
+    if o[\"user_id\"] != user[\"id\"]:
+        raise HTTPException(403, \"Forbidden\")
+    history = o.get(\"status_history\", [])
+    history.append({\"status\": \"confirmed\", \"at\": now_iso(), \"note\": \"Payment received\"})
+    await db.orders.update_one(
+        {\"id\": inp.order_id},
+        {
+            \"$set\": {
+                \"payment_status\": \"paid\",
+                \"payment_id\": inp.razorpay_payment_id,
+                \"status\": \"confirmed\",
+                \"status_history\": history,
+                \"updated_at\": now_iso(),
+            }
+        },
+    )
+    return {\"ok\": True, \"order_number\": o[\"order_number\"]}
+
+
+# ============================================================================
+# AI Image gener
